@@ -1,2 +1,5 @@
+#this should be whichever directory your files download to
 downloadsDir=C:\\Users\\{YourWindowsUserHere}\\Downloads
+#this should be the directory you want the map randos to eventually land
+#if you don't create the mapRandosDir before running the program, it will create it for you
 mapRandosDir=C:\\Users\\{YourWindowsUserHere}\\Downloads\\maprandos

@@ -84,7 +84,7 @@ type config struct {
 
 func (c *config) init(args []string) error {
 	flags := flag.NewFlagSet(args[0], flag.ExitOnError)
-	flags.String(flag.DefaultConfigFlagname, "", "Path to config file")
+	flags.String(flag.DefaultConfigFlagname, "./config.conf", "Path to config file")
 
 	var (
 		downloadsDir = flags.String("downloadsDir", "", "The downloads folder to watch for new map rando roms")
