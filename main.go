@@ -1,12 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"regexp"
 	"strings"
-
-	"github.com/namsral/flag"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -16,8 +16,11 @@ const (
 )
 
 func main() {
-	conf := &config{}
-	run(conf)
+	conf, err := loadConfig(".\\config.conf")
+	if err != nil {
+		os.Exit(1)
+	}
+	run(&conf)
 
 }
 
@@ -32,14 +35,29 @@ func run(conf *config) error {
 		log.Fatal(err2)
 	}
 	defer watcher.Close()
+	print(conf.LogDir, " is the log dir in the config\n")
+	print(conf.MapRandosDir, " is the maprando dir in the config\n")
+	// err = os.MkdirAll(conf.LogDir, os.ModePerm)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	fmt.Println(conf.LogDir+"\\mapRando.log", " is the current log directory")
+	logFile, err := os.Create(conf.LogDir + "\\mapRando.log")
+	// logFile, err := os.OpenFile(conf.logDir+"\\mapRando.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
-	//initialize config from commandline args
-	conf.init(os.Args)
-	//create maprando directory if not exists
-	err = os.MkdirAll(conf.mapRandosDir, os.ModePerm)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer logFile.Close()
+	log.SetOutput(logFile)
+	//initialize config from commandline args
+
+	//create maprando directory if not exists
+	err = os.MkdirAll(conf.MapRandosDir, os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Start listening for events.
 	go func() {
 		for {
@@ -54,7 +72,7 @@ func run(conf *config) error {
 					fName := strArr[len(strArr)-1]
 					log.Println("modified file:", event.Name)
 					log.Println("file without path is:", fName)
-					err3 := os.Rename(conf.downloadsDir+"\\"+fName, conf.mapRandosDir+"\\"+fName)
+					err3 := os.Rename(conf.DownloadsDir+"\\"+fName, conf.MapRandosDir+"\\"+fName)
 					if err3 != nil {
 						log.Fatal(err3)
 					}
@@ -68,7 +86,7 @@ func run(conf *config) error {
 		}
 	}()
 
-	err = watcher.Add(conf.downloadsDir)
+	err = watcher.Add(conf.DownloadsDir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,25 +96,19 @@ func run(conf *config) error {
 }
 
 type config struct {
-	downloadsDir string
-	mapRandosDir string
+	DownloadsDir string `json:"downloadsDir"`
+	MapRandosDir string `json:"mapRandosDir"`
+	LogDir       string `json:"logDir"`
 }
 
-func (c *config) init(args []string) error {
-	flags := flag.NewFlagSet(args[0], flag.ExitOnError)
-	flags.String(flag.DefaultConfigFlagname, "./config.conf", "Path to config file")
-
-	var (
-		downloadsDir = flags.String("downloadsDir", "", "The downloads folder to watch for new map rando roms")
-		mapRandosDir = flags.String("mapRandosDir", "", "The folder to move the map rando roms to")
-	)
-
-	if err := flags.Parse(args[1:]); err != nil {
-		return err
+func loadConfig(path string) (config, error) {
+	var cfg config
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return cfg, err
 	}
 
-	c.downloadsDir = *downloadsDir
-	c.mapRandosDir = *mapRandosDir
+	err = json.Unmarshal(data, &cfg)
 
-	return nil
+	return cfg, err
 }
