@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"log"
 	"os"
 	"regexp"
@@ -35,6 +36,19 @@ func run(conf *config) error {
 
 	//initialize config from commandline args
 	conf.init(os.Args)
+
+	// println("Current maprandos dir is ", conf.downloadsDir)
+	// println("Current log file dir", conf.logFile)
+
+	logFile, err := os.Create(conf.logFile + "\\mapRando.log")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer logFile.Close()
+	if conf.externalLoggingOn {
+		log.SetOutput(logFile)
+	}
+
 	//create maprando directory if not exists
 	err = os.MkdirAll(conf.mapRandosDir, os.ModePerm)
 	if err != nil {
@@ -49,14 +63,47 @@ func run(conf *config) error {
 					return
 				}
 				log.Println("event:", event)
-				if event.Has(fsnotify.Create) && regex.MatchString(event.Name) {
+				if event.Has(fsnotify.Write) && regex.MatchString(event.Name) {
 					strArr := strings.Split(event.Name, "\\")
 					fName := strArr[len(strArr)-1]
 					log.Println("modified file:", event.Name)
 					log.Println("file without path is:", fName)
-					err3 := os.Rename(conf.downloadsDir+"\\"+fName, conf.mapRandosDir+"\\"+fName)
+
+					//open destination file
+					destFile, err := os.Create(conf.mapRandosDir + "\\" + fName)
+					if err != nil {
+						print("Could not open destination file: ", conf.mapRandosDir+"\\"+fName)
+						log.Fatal(err)
+					}
+					defer destFile.Close()
+
+					//open source file
+					srcFile, err := os.Open(conf.downloadsDir + "\\" + fName)
+					if err != nil {
+						print("Could not open source file: ", conf.downloadsDir+"\\"+fName)
+					}
+					defer srcFile.Close()
+					srcFile.Seek(0, io.SeekStart)
+					//copy file from source to destination
+					//log.Printf("Copying src file %s to dest file %s", srcFile.Name(), destFile.Name())
+					bytesCopied, err3 := io.Copy(destFile, srcFile)
+					for i := 0; i < 5 && bytesCopied == 0; i++ {
+						bytesCopied, err3 = io.Copy(destFile, srcFile)
+					}
+
 					if err3 != nil {
 						log.Fatal(err3)
+					}
+
+					err = destFile.Sync()
+					if err != nil {
+						log.Print("failed to sync destination file ", err)
+						log.Fatal(err)
+					}
+
+					srcFile.Close()
+					if err = os.Remove(srcFile.Name()); err != nil {
+						log.Fatal("file copied, but failed to remove original: %w", err)
 					}
 				}
 			case err, ok := <-watcher.Errors:
@@ -78,8 +125,10 @@ func run(conf *config) error {
 }
 
 type config struct {
-	downloadsDir string
-	mapRandosDir string
+	downloadsDir      string
+	mapRandosDir      string
+	logFile           string
+	externalLoggingOn bool
 }
 
 func (c *config) init(args []string) error {
@@ -87,8 +136,10 @@ func (c *config) init(args []string) error {
 	flags.String(flag.DefaultConfigFlagname, "./config.conf", "Path to config file")
 
 	var (
-		downloadsDir = flags.String("downloadsDir", "", "The downloads folder to watch for new map rando roms")
-		mapRandosDir = flags.String("mapRandosDir", "", "The folder to move the map rando roms to")
+		downloadsDir      = flags.String("downloadsDir", "", "The downloads folder to watch for new map rando roms")
+		mapRandosDir      = flags.String("mapRandosDir", "", "The folder to move the map rando roms to")
+		logFile           = flags.String("logFile", "./", "where logFile will be written")
+		externalLoggingOn = flags.Bool("externalLoggingOn", false, "Log to an external log file")
 	)
 
 	if err := flags.Parse(args[1:]); err != nil {
@@ -97,6 +148,8 @@ func (c *config) init(args []string) error {
 
 	c.downloadsDir = *downloadsDir
 	c.mapRandosDir = *mapRandosDir
+	c.logFile = *logFile
+	c.externalLoggingOn = *externalLoggingOn
 
 	return nil
 }

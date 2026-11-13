@@ -29,6 +29,7 @@ go.work.sum
 
 # conf files
 *.conf
+*.log
 
 # Editor/IDE
 # .idea/
